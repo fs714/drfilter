@@ -1,11 +1,8 @@
 import requests
-import re
 import json
 import webob.dec
 import thread
-import pdb
 import logging
-import os
 
 
 def url_forwarding_factory(global_conf, **local_conf):
@@ -14,23 +11,27 @@ def url_forwarding_factory(global_conf, **local_conf):
     return filter
 
 
-def post_response(req_url, data,headers, timeout):
-    mylog = logging.getLogger('mylog')
-    mylog.setLevel(logging.DEBUG)
-    fh=logging.FileHandler('/home/eshufan/project/drfilter/drfilter/logging.log')
+def post_response(req_url, env, data, headers, timeout=1):
+    logger = logging.getLogger('drfilter')
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(
+        '/home/eshufan/project/drfilter/drfilter/drfilter.log')
     fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
-    mylog.addHandler(fh)
+    logger.addHandler(fh)
     try:
-        res=requests.post(req_url, data=data,headers=headers, timeout=timeout)
-        mylog.info('----------------------------------------------------------')
-        mylog.info(data)
-        mylog.info(res)
-        mylog.info('----------------------------------------------------------')
+        res = requests.post(req_url, data=data, headers=headers,
+                            timeout=timeout)
+        logger.info('------------------------------------------')
+        for key, value in sorted(env.items()):
+            logger.info(key + " = " + repr(value))
+        logger.info(data)
+        logger.info(json.dumps(res, indent=4, sort_keys=True))
     finally:
-        mylog.removeHandler(fh)
         thread.exit()
+
 
 class UrlForwarding(object):
     def __init__(self, app, global_conf, local_conf):
@@ -40,86 +41,63 @@ class UrlForwarding(object):
             self.ip = local_conf['ip']
         else:
             self.ip = '127.0.0.1'
-       
+
         if 'port' in local_conf:
             self.port = local_conf['port']
         else:
             self.port = 10080
-        
+
         if 'lib_type' in local_conf:
             self.lib_type = local_conf['lib_type']
         else:
             self.lib_type = None
 
-     
     @webob.dec.wsgify
     def __call__(self, req):
         res = req.get_response(self.app)
-        if (res.content_length > 0):
-            response=res.json
-        else:
-            response={}
-        if (not response.has_key('badRequest')):
-            env = req.environ.copy()
-            method=env.get('REQUEST_METHOD')
-            if (method=='DELETE') or (method=='PUT') or (method=='POST'):
-                if (env.get('HTTP_X_TENANT') != 'service'):
+        env = req.environ
+        method = env.get('REQUEST_METHOD')
+        if (method == 'DELETE') or (method == 'PUT') or (method == 'POST'):
+            if (env.get('HTTP_X_TENANT') != 'service'):
+                if (res.content_length > 0):
+                    response = res.json
+                else:
+                    response = {}
+                if ('badRequest' not in response):
                     headers = {'Content-type': 'application/json',
                                'openstack-service': self.app.__repr__()}
                     forwarding_data = {}
                     forwarding_data['Request'] = (self.update_env(req))
-                    forwarding_data['tenant']=env.get('HTTP_X_TENANT')
                     forwarding_data['Response'] = response
-                    req_url = 'http://' + str(self.ip) + ':' + str(self.port) + '/v1/'+self.lib_type
-                    timeout=1
-                    thread.start_new_thread(post_response,(req_url,json.dumps(forwarding_data),
-                                        headers, timeout))
+                    req_url = 'http://' + str(self.ip) + ':' + str(self.port) \
+                        + '/v1/'+self.lib_type
+                    timeout = 1
+                    forwarding_json = json.dumps(forwarding_data, indent=4,
+                                                 sort_keys=True)
+                    thread.start_new_thread(post_response, (req_url, env,
+                                                            forwarding_json,
+                                                            headers, timeout))
         return res
 
-    def update_env(self,req):
+    def update_env(self, req):
         env = req.environ.copy()
-        body=env['wsgi.input']
-        mylog = logging.getLogger('mylog')
-        mylog.setLevel(logging.DEBUG)
-        fh=logging.FileHandler('/home/eshufan/project/drfilter/drfilter/logging.log')
-        fh.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh.setFormatter(formatter)
-        mylog.addHandler(fh)
-        post_req={}
-        
-        for name, value in sorted(env.items()):
-            if self.has_object_address(str(value)):
-                del env[name]
-        mylog.info('----------------------------------------------------------')
-        mylog.info(env)
-   
-        
-        #get wsgi.input
-        try:  
-           request_body_size = int(env.get('CONTENT_LENGTH', 0))  
-        except (ValueError):  
-           request_body_size = 0 
-        inputcontext=body.read(request_body_size).replace('true','True').replace('false','False')
-        mylog.info(inputcontext)
-        mylog.info('----------------------------------------------------------')
-        mylog.removeHandler(fh)
-        if len(inputcontext)>0:
-           post_req['wsgi.input']=eval(inputcontext)
-        else:
-           post_req['wsgi.input']= None  
-      
-        # get url
-        post_req['url']=req.url                     
-        
-        #get type
-        post_req['type']=env['REQUEST_METHOD']
-        return post_req
+        post_req = {}
 
-    def has_object_address(self, value):
-        pattern = re.compile(r'.*0x[0-9a-f]{12}')
-        match = pattern.match(value)
-        if match:
-            return True
+        # Get wsgi.input
+        body = env['wsgi.input']
+        try:
+            request_body_size = int(env.get('CONTENT_LENGTH', 0))
+        except (ValueError):
+            request_body_size = 0
+        input_context = body.read(request_body_size)
+        if len(input_context) > 0:
+            post_req['wsgi.input'] = eval(input_context)
         else:
-            return False
+            post_req['wsgi.input'] = None
+
+        # Get url
+        post_req['url'] = req.url
+
+        # Get type
+        post_req['type'] = env['REQUEST_METHOD']
+        return post_req
