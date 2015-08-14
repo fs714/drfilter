@@ -11,14 +11,13 @@ def url_forwarding_factory(global_conf, **local_conf):
     return filter
 
 
-def post_response(req_url, env, data, headers, timeout=1):
+def post_response(req_url, env, data, headers,type, timeout=1):
     logger = logging.getLogger('drfilter')
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler(
-        '/home/eshufan/project/drfilter/drfilter/drfilter.log')
+    file_path='/var/log/'+type+'/drfilter.log'
+    fh = logging.FileHandler(file_path)
     fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
     try:
@@ -30,6 +29,7 @@ def post_response(req_url, env, data, headers, timeout=1):
         logger.info(data)
         logger.info(json.dumps(res, indent=4, sort_keys=True))
     finally:
+        logger.removeHandler(fh)
         thread.exit()
 
 
@@ -60,7 +60,10 @@ class UrlForwarding(object):
         if (method == 'DELETE') or (method == 'PUT') or (method == 'POST'):
             if (env.get('HTTP_X_TENANT') != 'service'):
                 if (res.content_length > 0):
-                    response = res.json
+                    try:
+                        response = res.json
+                    except: 
+                        return res
                 else:
                     response = {}
                 if ('badRequest' not in response):
@@ -76,7 +79,8 @@ class UrlForwarding(object):
                                                  sort_keys=True)
                     thread.start_new_thread(post_response, (req_url, env,
                                                             forwarding_json,
-                                                            headers, timeout))
+                                                            headers,self.lib_type,
+                                                            timeout))
         return res
 
     def update_env(self, req):
@@ -91,7 +95,7 @@ class UrlForwarding(object):
             request_body_size = 0
         input_context = body.read(request_body_size)
         if len(input_context) > 0:
-            post_req['wsgi.input'] = eval(input_context)
+            post_req['wsgi.input'] = eval(input_context.replace('true','True').replace('false','False').replace('null','None').replace('none','None'))
         else:
             post_req['wsgi.input'] = None
 
@@ -101,3 +105,4 @@ class UrlForwarding(object):
         # Get type
         post_req['type'] = env['REQUEST_METHOD']
         return post_req
+

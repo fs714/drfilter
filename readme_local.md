@@ -30,4 +30,16 @@ HOW TO USE!
   paste.filter_factory = drfilter.urlforwarding:url_forwarding_factor
   lib_type=glance
 
-5 restart openstack
+5 change drfilter/drfilter/urlforwarding.py
+  def post_response(req_url, env, data, headers,type, timeout=1):
+    logger = logging.getLogger('drfilter')
+    logger.setLevel(logging.DEBUG)
+    file_path='/var/log/'+type+'/drfilter.log'
+  
+  change to 
+  
+    file_path='/var/log/drfiler.log'
+  
+  ps:log is in /var/log/drfiler.log
+
+6  restart openstack
