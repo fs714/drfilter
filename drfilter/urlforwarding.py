@@ -11,10 +11,10 @@ def url_forwarding_factory(global_conf, **local_conf):
     return filter
 
 
-def post_response(req_url, env, data, headers,type, timeout=1):
+def post_response(req_url, env, data, headers,lib_type, timeout=1):
     logger = logging.getLogger('drfilter')
     logger.setLevel(logging.DEBUG)
-    file_path='/var/log/'+type+'/drfilter.log'
+    file_path='/var/log/'+lib_type+'/drfilter.log'
     fh = logging.FileHandler(file_path)
     fh.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -66,18 +66,25 @@ class UrlForwarding(object):
                         return res
                 else:
                     response = {}
-                if ('badRequest' not in response):
-                    headers = {'Content-type': 'application/json',
+                if (response != {}):
+                    temp=response.values()[0]
+                    if (temp.has_key('code')):
+                        res_code=temp['code']
+                        if (res_code !=200):
+                            return res
+                if (str(response).find("Error")):
+                    return res   
+                headers = {'Content-type': 'application/json',
                                'openstack-service': self.app.__repr__()}
-                    forwarding_data = {}
-                    forwarding_data['Request'] = (self.update_env(req))
-                    forwarding_data['Response'] = response
-                    req_url = 'http://' + str(self.ip) + ':' + str(self.port) \
+                forwarding_data = {}
+                forwarding_data['Request'] = (self.update_env(req))
+                forwarding_data['Response'] = response
+                req_url = 'http://' + str(self.ip) + ':' + str(self.port) \
                         + '/v1/'+self.lib_type
-                    timeout = 1
-                    forwarding_json = json.dumps(forwarding_data, indent=4,
+                timeout = 1
+                forwarding_json = json.dumps(forwarding_data, indent=4,
                                                  sort_keys=True)
-                    thread.start_new_thread(post_response, (req_url, env,
+                thread.start_new_thread(post_response, (req_url, env,
                                                             forwarding_json,
                                                             headers,self.lib_type,
                                                             timeout))
