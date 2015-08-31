@@ -20,7 +20,7 @@
   [composite:neutronapi_v2_0]
   use = call:neutron.auth:pipeline_factory 
   noauth = request_id catch_errors extensions neutronapiapp_v2_0
-  keystone = request_id catch_errors authtoken keystonecontext extensions drfilter neutronapiapp_v2_0
+  keystone = request_id catch_errors authtoken keystonecontext drfilter extensions neutronapiapp_v2_0
   ...
   [filter:drfilter]
   paste.filter_factory = drfilter.urlforwarding:url_forwarding_factor
