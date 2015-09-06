@@ -72,7 +72,7 @@ class UrlForwarding(object):
                         res_code=temp['code']
                         if (res_code !=200):
                             return res
-                if (str(response).find("Error")):
+                if (str(response).find("Error") != -1):
                     return res   
                 headers = {'Content-type': 'application/json',
                                'openstack-service': self.app.__repr__()}
